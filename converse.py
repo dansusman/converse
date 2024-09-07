@@ -2,11 +2,36 @@ import sys
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+import pickle
+import os
 
 # Define your Spotify and YouTube credentials
 
-# Scopes for accessing user's playlists
-SCOPE = 'playlist-read-private playlist-read-collaborative'
+# Define YouTube OAuth2 scopes
+YOUTUBE_SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
+
+def get_youtube_service():
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is created automatically when the
+    # authorization flow completes for the first time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', YOUTUBE_SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    return build('youtube', 'v3', credentials=creds)
 
 def get_spotify_playlists(sp):
     playlists = []
@@ -34,7 +59,7 @@ def get_spotify_playlist_tracks(sp_playlist_id, sp):
 
 def search_youtube(query, youtube):
     search_response = youtube.search().list(
-        q=query,
+        q=query + " explicit",
         part='id,snippet',
         type='video',
         maxResults=1
@@ -52,7 +77,7 @@ def create_youtube_playlist(youtube, title, description):
                 'description': description
             },
             'status': {
-                'privacyStatus': 'public'
+                'privacyStatus': 'private'
             }
         }
     )
@@ -79,11 +104,11 @@ def main(sp_playlist_name, yt_playlist_name):
         client_id=SPOTIPY_CLIENT_ID,
         client_secret=SPOTIPY_CLIENT_SECRET,
         redirect_uri=SPOTIPY_REDIRECT_URI,
-        scope=SCOPE
+        scope='playlist-read-private playlist-read-collaborative'
     ))
 
     # YouTube Setup
-    youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+    youtube = get_youtube_service()
 
     # Get User's Spotify Playlists
     playlists = get_spotify_playlists(sp)
